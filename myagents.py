@@ -1,4 +1,3 @@
-Draft change
 """
  Artificial Inteligence (H)
  Assessed Exercise 2017/2018
