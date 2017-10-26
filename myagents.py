@@ -138,6 +138,8 @@ def GetMissionInstance( mission_type, mission_seed, agent_type):
 
     n_intermediate_rewards = random.randrange(1,5) * nir.get(mission_type, 10) # How many intermediate rewards...?
 
+    #in the below, why is the default of the msize.get() method 100? Thats a stupidly large map
+    #note that the end stone is not fixed to the edge
     xml_str = '''<?xml version="1.0" encoding="UTF-8" ?>
         <Mission xmlns="http://ProjectMalmo.microsoft.com" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
           <About>
@@ -225,7 +227,7 @@ def init_mission(agent_host, port=0, agent_type='Unknown',mission_type='Unknown'
         my_mission.observeGrid(-n,-1,-n, n, -1, n, 'grid');
         my_mission.requestVideoWithDepth(320,240)
     elif agent_type.lower()=='helper':
-        n = 100
+        n = 100 #LEE CF to the xml on why this was 100 by default
         my_mission.observeGrid(-n,-1,-n, n, -1, n, 'grid');
         my_mission.requestVideoWithDepth(320,240)
     else:
@@ -300,7 +302,7 @@ class AgentRealistic:
         self.AGENT_ALLOWED_ACTIONS = ["movenorth 1", "movesouth 1", "movewest 1", "moveeast 1"]
 
         self.agent_host = agent_host
-        self.agent_port = agent_port
+        self.agent_port = agent_port #LEE : could do with some instruction on what a port does
         self.mission_seed = mission_seed
         self.mission_type = mission_type
         self.state_space = None; # NOTE: The Realistic can not know anything about the state_space a prior i !
@@ -311,7 +313,7 @@ class AgentRealistic:
     #----------------------------------------------------------------------------------------------------------------#
     def __ExecuteActionForRealisticAgentWithNoisyTransitionModel__(idx_requested_action, noise_level):
         """ Creates a well-defined transition model with a certain noise level """
-        n = len(self.AGENT_ALLOWED_ACTIONS)
+        n = len(self.AGENT_ALLOWED_ACTIONS) #LEE: would like to ipdb this to see whats going on
         pp = noise_level/(n-1) * np.ones((n,1))
         pp[idx_request_action] = 1.0 - noise_level
         idx_actual = np.random.choice(n, 1, p=pp.flatten()) # sample from the distribution of actions
@@ -493,7 +495,7 @@ class AgentHelper:
     def __init__(self,agent_host,agent_port, mission_type, mission_seed, solution_report, state_space_graph):
         """ Constructor for the helper agent """
         self.AGENT_NAME = 'Helper'
-        self.AGENT_MOVEMENT_TYPE = 'Absolute' # NoteÆ the helper needs absolute movements
+        self.AGENT_MOVEMENT_TYPE = 'Absolute' # Note the helper needs absolute movements
         self.DO_PLOT = False
 
         self.agent_host = agent_host
