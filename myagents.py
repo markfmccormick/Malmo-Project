@@ -348,7 +348,7 @@ class AgentSimple:
 
     def __init__(self,agent_host,agent_port, mission_type, mission_seed, solution_report, state_space):
         """ Constructor for the simple agent """
-        self.AGENT_MOVEMENT_TYPE = 'Discrete' # HINT: You can change this if you want {Absolute, Discrete, Continuous}
+        self.AGENT_MOVEMENT_TYPE = 'Absolute' # HINT: You can change this if you want {Absolute, Discrete, Continuous}
         self.AGENT_NAME = 'Simple'
 
         self.agent_host = agent_host
@@ -372,7 +372,196 @@ class AgentSimple:
 
         # INSERT: YOUR SOLUTION HERE (REMEMBER TO MANUALLY UPDATE THE solution_report DEPENDING ON YOU SOLUTION)
 
+        #self.state_space.goal_id = 0
+        #print self.state_space.state_actions = maze map
+        #print self.state_space.state_locations = maze map locations
+
+        print self.state_space.start_id
+        print self.state_space.goal_id
+
+        # Create map to represent the maze
+        maze_map = UndirectedGraph(dict(self.state_space.state_actions))
+
+        maze_map.locations = self.state_space.state_locations
+
+        # Create the maze problem object
+        maze_problem = GraphProblem(self.state_space.start_id, self.state_space.goal_id, maze_map)
+
+        node = astar_search(problem=maze_problem, h=None)
+
+        solution_path = [node]
+        cnode = node.parent
+        solution_path.append(cnode)
+        while cnode.state != "S_00_00" and not cnode.parent == None:
+            cnode = cnode.parent
+            solution_path.append(cnode)
+
+        # Make a copy of the solution_path list extracted above
+        # which we can threath as a stack
+        #
+        solution_path_local = deepcopy(solution_path)
+        print(solution_path_local)
+
+        # # This is to fix an issue with a single machine, ignore if everything works
+        # useSpecificPort = 0  # Should be 0 for standard use
+        # if useSpecificPort > 0:
+        #     client_pool = MalmoPython.ClientPool()
+        #     client_pool.add(MalmoPython.ClientInfo("127.0.0.1", useSpecificPort))
+
+        # # Attempt to start a mission
+        # max_retries = 3
+        # for retry in range(max_retries):
+        #     try:
+        #         if useSpecificPort > 0:
+        #             agent_host.startMission(my_mission, client_pool, my_mission_record, 0, "")
+        #         else:
+        #             agent_host.startMission(my_mission, my_mission_record)
+        #
+        #         break
+        #     except RuntimeError as e:
+        #         if retry == max_retries - 1:
+        #             print "Error starting mission:", e
+        #             exit(1)
+        #         else:
+        #             time.sleep(2)
+
+        # Loop until mission starts:
+        print "Waiting for the mission to start ",
+        state_t = agent_host.getWorldState()
+        # while not state_t.has_mission_begun:
+        #     sys.stdout.write(".")
+        #     time.sleep(0.1)
+        #     state_t = agent_host.getWorldState()
+        #     for error in state_t.errors:
+        #         print "Error:", error.text
+        #
+        # print("")
+        # print("Mission started... you can gain control by pressing Return \n\n"),
+        #
+        agent_host.setObservationsPolicy(MalmoPython.ObservationsPolicy.LATEST_OBSERVATION_ONLY)
+        agent_host.setVideoPolicy(MalmoPython.VideoPolicy.LATEST_FRAME_ONLY)
+
+        reward_cumulative = 0.0
+
+        # Main loop:
+        while state_t.is_mission_running:
+
+            # The actions are carried out by teleportation
+            target_node = solution_path_local.pop()
+            try:
+                print("Action_t: Goto state " + target_node.state)
+                if target_node.state == "S_01_09":
+                    # Hack for AbsolutMovements: Do not take the full step to 1,9 ; then you will "die" we just need to be close enough (0.25)
+                    x_new = 1
+                    z_new = 8.75
+                else:
+                    xz_new = maze_map.locations.get(target_node.state);
+                    x_new = xz_new[0] + 0.5
+                    z_new = xz_new[1] + 0.5
+
+                agent_host.sendCommand("tp " + str(x_new) + " " + str(217) + " " + str(z_new))
+            except RuntimeError as e:
+                print "Failed to send command:", e
+                pass
+
+                # Wait 0.5 sec
+            time.sleep(0.5)
+
+            # Get the world state
+            state_t = agent_host.getWorldState()
+
+            # Collect the number of rewards and add to reward_cumulative
+            # Note: Since we only observe the sensors and environment every a number of rewards may have accumulated in the buffer
+            for reward_t in state_t.rewards:
+                print "Reward_t:", reward_t.getValue()
+                reward_cumulative += reward_t.getValue()
+
+            # Check if anything went wrong along the way
+            for error in state_t.errors:
+                print "Error:", error.text
+
+            # Handle the percepts
+            xpos = None
+            ypos = None
+            zpos = None
+            yaw = None
+            pitch = None
+            if state_t.number_of_observations_since_last_state > 0:  # Has any Oracle-like and/or internal sensor observations come in?
+                msg = state_t.observations[-1].text  # Get the detailed for the last observed state
+                oracle = json.loads(msg)  # Parse the Oracle JSON
+
+                # Orcale
+                grid = oracle.get(u'grid', 0)  #
+
+                # GPS-like sensor
+                xpos = oracle.get(u'XPos', 0)  # Position in 2D plane, 1st axis
+                zpos = oracle.get(u'ZPos', 0)  # Position in 2D plane, 2nd axis (yes Z!)
+                ypos = oracle.get(u'YPos', 0)  # Height as measured from surface! (yes Y!)
+
+                # Standard "internal" sensory inputs
+                yaw = oracle.get(u'Yaw', 0)  #
+                pitch = oracle.get(u'Pitch', 0)  #
+
+            # -- Print some of the state information --#
+            print("Percept: video,observations,rewards received:", state_t.number_of_video_frames_since_last_state,
+                  state_t.number_of_observations_since_last_state, state_t.number_of_rewards_since_last_state)
+            print("\tcoordinates (x,y,z,yaw,pitch):" + str(xpos) + " " + str(ypos) + " " + str(zpos) + " " + str(
+                yaw) + " " + str(pitch))
+
+        # --------------------------------------------------------------------------------------------
+        # Summary
+        print("\n\nSummary:")
+        print(
+        "Mission has ended ... either because time has passed (-1000 reward) or goal reached (1000 reward) or early stop (0 reward)")
+        print("Cumulative reward = " + str(reward_cumulative))
+
+
         return
+
+def best_first_graph_search(problem, f):
+    """Search the nodes with the lowest f scores first.
+    You specify the function f(node) that you want to minimize; for example,
+    if f is a heuristic estimate to the goal, then we have greedy best
+    first search; if f is node.depth then we have breadth-first search.
+    There is a subtlety: the line "f = memoize(f, 'f')" means that the f
+    values will be cached on the nodes as they are computed. So after doing
+    a best first search you can examine the f values of the path returned."""
+
+    f = memoize(f, 'f')
+    node = Node(problem.initial)
+
+    if problem.goal_test(node.state):
+        return node
+
+    frontier = PriorityQueue(min, f)
+    frontier.append(node)
+
+    explored = set()
+    while frontier:
+        node = frontier.pop()
+
+        if problem.goal_test(node.state):
+            return node
+
+        explored.add(node.state)
+        for child in node.expand(problem):
+            if child.state not in explored and child not in frontier:
+                frontier.append(child)
+            elif child in frontier:
+                incumbent = frontier[child]
+                if f(child) < f(incumbent):
+                    del frontier[incumbent]
+                    frontier.append(child)
+
+    return None
+
+def astar_search(problem, h=None):
+    """A* search is best-first graph search with f(n) = g(n)+h(n).
+    You need to specify the h function when you call astar_search, or
+    else in your Problem subclass."""
+    h = memoize(h or problem.h, 'h')
+    node = best_first_graph_search(problem, lambda n: n.path_cost + h(n))
+    return node
 
 #--------------------------------------------------------------------------------------
 #-- This class implements a basic, suboptimal Random Agent. The purpurpose is to provide a baseline for other agent to beat. --#
@@ -565,6 +754,7 @@ class AgentHelper:
                 nn = int(math.sqrt(X.size))
                 X = np.reshape(X, [nn,nn]) # Note: this matrix/table is index as z,x
 
+
                 #-- Visualize the discrete state-space --#
                 if self.DO_PLOT:
                     print(yaw)
@@ -628,6 +818,8 @@ class AgentHelper:
                 self.state_space.goal_id  = state_goal_id
                 self.state_space.goal_loc = loc_goal
 
+
+
             #-- Reward location and values --#
             # OPTIONAL: If you want to account for the intermediate rewards
             # in the Random/Simple agent (or in your analysis) you can
@@ -653,6 +845,7 @@ class AgentHelper:
             self.state_space.reward_timeout = reward_timeout
             self.state_space.timeout = timeout
             self.state_space.reward_sendcommand = reward_sendcommand
+
         else:
             self.state_space = None
             #-- End if observations --#
@@ -666,8 +859,8 @@ if __name__ == "__main__":
     #-- Define default arguments, in case you run the module as a script --#
     DEFAULT_STUDENT_GUID = 'template'
     DEFAULT_AGENT_NAME   = 'Random' #HINT: Currently choose between {Random,Simple, Realistic}
-    DEFAULT_MALMO_PATH   = 'C:/Users/Bjorn/Dropbox/ug/ai2016/malmo/Malmo-0.30.0-Windows-64bit/' # HINT: Change this to your own path
-    DEFAULT_AIMA_PATH    = 'C:/Users/Bjorn/Dropbox/ug/ai2016/AI2016-2017_bj/code/aima-python/'  # HINT: Change this to your own path, forward slash only, should be the 2.7 version from https://www.dropbox.com/s/vulnv2pkbv8q92u/aima-python_python_v27_r001.zip?dl=0) or for Python 3.x get it from https://github.com/aimacode/aima-python
+    DEFAULT_MALMO_PATH   = '/home/mark/Malmo-0.31.0-Linux-Ubuntu-16.04-64bit_withBoost_Python2.7/' # HINT: Change this to your own path
+    DEFAULT_AIMA_PATH    = '/home/mark/aima-python'  # HINT: Change this to your own path, forward slash only, should be the 2.7 version from https://www.dropbox.com/s/vulnv2pkbv8q92u/aima-python_python_v27_r001.zip?dl=0) or for Python 3.x get it from https://github.com/aimacode/aima-python
     DEFAULT_MISSION_TYPE = 'small'  #HINT: Choose between {small,medium,large}
     DEFAULT_MISSION_SEED_MAX = 1    #HINT: How many different instances of the given mission (i.e. maze layout)
     DEFAULT_REPEATS      = 1        #HINT: How many repetitions of the same maze layout
@@ -724,9 +917,9 @@ if __name__ == "__main__":
     import MalmoPython
 
     #-- OPTIONAL: Import the AIMA tools (for representing the state-space)--#
-    #print('Add AIMA lib to the Python environment ['+args.aimapath+']')
-    #sys.path.append(args.aimapath+'/')
-    #from search import *
+    print('Add AIMA lib to the Python environment ['+args.aimapath+']')
+    sys.path.append(args.aimapath+'/')
+    from search import *
 
     #-- Create the command line string for convenience --#
     cmd = 'python myagents.py -a ' + args.agentname + ' -s ' + str(args.missionseedmax) + ' -n ' + str(args.nrepeats) + ' -t ' + args.missiontype + ' -g ' + args.studentguid + ' -p ' + args.malmopath + ' -x ' + str(args.malmoport)
@@ -748,6 +941,7 @@ if __name__ == "__main__":
             helper_solution_report = SolutionReport()
             helper_agent = AgentHelper(agent_host,args.malmoport,args.missiontype,i_training_seed, helper_solution_report, None)
             helper_agent.run_agent()
+
         else:
             helper_agent = None
 
