@@ -49,7 +49,7 @@ class SolutionReport(object):
     def addAction(self):
         self.action_count += 1
 
-    def addReward(self, reward, datetime_):
+    def addReward(self, reward): #, datetime_):
         self.reward_cumulative += reward
 
     def checkMissionXML(self):
@@ -372,13 +372,6 @@ class AgentSimple:
 
         # INSERT: YOUR SOLUTION HERE (REMEMBER TO MANUALLY UPDATE THE solution_report DEPENDING ON YOU SOLUTION)
 
-        #self.state_space.goal_id = 0
-        #print self.state_space.state_actions = maze map
-        #print self.state_space.state_locations = maze map locations
-
-        print self.state_space.start_id
-        print self.state_space.goal_id
-
         # Create map to represent the maze
         maze_map = UndirectedGraph(dict(self.state_space.state_actions))
 
@@ -396,48 +389,14 @@ class AgentSimple:
             cnode = cnode.parent
             solution_path.append(cnode)
 
-        # Make a copy of the solution_path list extracted above
-        # which we can threath as a stack
-        #
+        # Make a copy of the solution_path list to use as a stack
+
         solution_path_local = deepcopy(solution_path)
-        print(solution_path_local)
-
-        # # This is to fix an issue with a single machine, ignore if everything works
-        # useSpecificPort = 0  # Should be 0 for standard use
-        # if useSpecificPort > 0:
-        #     client_pool = MalmoPython.ClientPool()
-        #     client_pool.add(MalmoPython.ClientInfo("127.0.0.1", useSpecificPort))
-
-        # # Attempt to start a mission
-        # max_retries = 3
-        # for retry in range(max_retries):
-        #     try:
-        #         if useSpecificPort > 0:
-        #             agent_host.startMission(my_mission, client_pool, my_mission_record, 0, "")
-        #         else:
-        #             agent_host.startMission(my_mission, my_mission_record)
-        #
-        #         break
-        #     except RuntimeError as e:
-        #         if retry == max_retries - 1:
-        #             print "Error starting mission:", e
-        #             exit(1)
-        #         else:
-        #             time.sleep(2)
 
         # Loop until mission starts:
         print "Waiting for the mission to start ",
         state_t = agent_host.getWorldState()
-        # while not state_t.has_mission_begun:
-        #     sys.stdout.write(".")
-        #     time.sleep(0.1)
-        #     state_t = agent_host.getWorldState()
-        #     for error in state_t.errors:
-        #         print "Error:", error.text
-        #
-        # print("")
-        # print("Mission started... you can gain control by pressing Return \n\n"),
-        #
+
         agent_host.setObservationsPolicy(MalmoPython.ObservationsPolicy.LATEST_OBSERVATION_ONLY)
         agent_host.setVideoPolicy(MalmoPython.VideoPolicy.LATEST_FRAME_ONLY)
 
@@ -446,7 +405,7 @@ class AgentSimple:
         # Main loop:
         while state_t.is_mission_running:
 
-            # The actions are carried out by teleportation
+            # Use absolute movement
             target_node = solution_path_local.pop()
             try:
                 print("Action_t: Goto state " + target_node.state)
@@ -460,6 +419,7 @@ class AgentSimple:
                     z_new = xz_new[1] + 0.5
 
                 agent_host.sendCommand("tp " + str(x_new) + " " + str(217) + " " + str(z_new))
+                self.solution_report.addAction()
             except RuntimeError as e:
                 print "Failed to send command:", e
                 pass
@@ -515,6 +475,7 @@ class AgentSimple:
         "Mission has ended ... either because time has passed (-1000 reward) or goal reached (1000 reward) or early stop (0 reward)")
         print("Cumulative reward = " + str(reward_cumulative))
 
+        self.solution_report.addReward(reward_cumulative)
 
         return
 
